@@ -9,6 +9,11 @@ namespace micagent{
 using namespace std;
 using namespace neb;
 
+/* 线程管理相关的全局变量 */
+atomic_bool _running(false);    //接口是否运行的标志
+mutex _config_interface_conn_mtx;
+condition_variable _config_interface_conn;
+
 int configInterface::_NetToJson(const struct netInformation& netinfo, string& netJson){
     CJsonObject transJson;  //总的json格式的报文
     CJsonObject netJsonObj; //网络配置信息格式的报文
@@ -186,6 +191,39 @@ int configInterface::_getNet(vector<netInformation>& netinfo_v){
     return 0;
 }
 
+
+void configInterface::_net_take_effect(CJsonObject data)
+{
+    char cmd[128] = {0};
+    int eth_type = 0;
+    data.Get("id",eth_type);
+
+    memset(cmd, 0, sizeof(cmd));
+    sprintf(cmd,"ifconfig eth%d down",eth_type);
+    system(cmd);
+
+    memset(cmd, 0, sizeof(cmd));
+    sprintf(cmd,"ifconfig eth%d hw ether %s",eth_type,data("Mac").c_str());
+    system(cmd);
+
+    memset(cmd, 0, sizeof(cmd));
+    sprintf(cmd,"ifconfig eth%d %s netmask %s",eth_type,data("IpAddr").c_str(),data("SubNetMask").c_str());
+    system(cmd);
+
+    memset(cmd, 0, sizeof(cmd));
+    sprintf(cmd,"route add default gw %s",data("GateWay").c_str());
+    system(cmd);
+
+    memset(cmd, 0, sizeof(cmd));
+    sprintf(cmd,"ifconfig eth%d up",eth_type);
+    system(cmd);
+
+    return;
+}
+
+
+
+
 int configInterface::_setNet(struct netInformation* netinfo, const string& netPath){
     dictionary* defaultConfig=dictionary_new(0);
     /*修改网卡编号*/
@@ -222,7 +260,7 @@ int configInterface::_setNet(struct netInformation* netinfo, const string& netPa
 }
 
 /* 修改或新增 */
-int configInterface::_setNet(const string& netinfo, const string& netPath){
+int configInterface::_setNet(const string& netinfo, const string& netPath, CJsonObject& outinfo){
     cout<<"IN::_setNet"<<endl;
     if(netinfo.length()<2 || netinfo[0] != '{'){
         return -1;  //字符串无效时，直接返回
@@ -233,7 +271,12 @@ int configInterface::_setNet(const string& netinfo, const string& netPath){
     CJsonObject arrjson;
     totaljson.Get("Parameters",arrjson);
     CJsonObject netjson(arrjson[0]);
+#ifdef __DEBUG_CZX_
     cout<<arrjson[0].ToFormattedString()<<endl;
+#endif
+    outinfo=arrjson[0];  //将网络配置信息的json格式传出
+
+
     //CJsonObject netjson(netinfo);   //读取json内容
     dictionary* defaultConfig=iniparser_load(netPath.c_str());
     struct netInformation net_s{0};
@@ -306,6 +349,7 @@ void configInterface::_handler(struct mg_connection* c, int ev, void* ev_data, v
     string net_configPath=(*((map<string, paramType>*)fn_data))[NETURI]._configPath;
     string net_jsonBuf(""); //存放接收到的json格式报文
     vector<netInformation> nic_vec; //存放设备所有网卡的详细信息
+    CJsonObject net_json_effective;  //存放报文中实际有效的网络配置信息
     
 
     /* GB配置修改相关变量 */
@@ -333,7 +377,7 @@ MG_INFO(("Last chunk received, sending response"));
         if(ProtocolCode==1004){     //网络信息配置
             mg_http_reply(c, 200, HTTP_RESPONSE_JSON, "{\"ProtocolCode\":1005,\"Parameters\":0}");
             ++net_tag;
-            _setNet(net_jsonBuf, net_configPath);
+            _setNet(net_jsonBuf, net_configPath, net_json_effective);
             net_jsonBuf.clear();
         }
         else if(ProtocolCode==1006){        //网络信息获取
@@ -403,11 +447,13 @@ cout<<gb_bufjson[0].ToFormattedString()<<endl;
         write_conn(c);
         //read_conn(c);
         //close_conn(c);
-        cout<<"Reboot soon..."<<endl;
-        sleep(5);
-        system("reboot");
+        //cout<<"Reboot soon..."<<endl;
+        //sleep(5);
+        //system("reboot");
+        _net_take_effect(net_json_effective);
+        _running.exchange(false);   //网络配置生效后立即停止运行
+        _config_interface_conn.notify_one();    //唤醒阻塞的interface线程
     }
-
 }
 
 
@@ -449,7 +495,7 @@ void configInterface::run(void){
     }
 
     mg_log_set(MG_LL_DEBUG);
-    mg_http_listen(&_mgr, (const char*)_url, _handler, &_uriEvent);
+    while(mg_http_listen(&_mgr, (const char*)_url, _handler, &_uriEvent)==NULL);
 
 
     while(_running){
@@ -459,9 +505,10 @@ void configInterface::run(void){
 }
 
 void configInterface::stop(void){
-    _running=false;
+    _running.exchange(false);
     close(_gb_fd);
     close(_net_fd);
+cout<<__FILE__<<" "<<__FUNCTION__<<" "<<__LINE__<<" "<<"Notify here !"<<endl;
 }
 
 }
