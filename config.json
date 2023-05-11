@@ -1,0 +1,16 @@
+{
+	"LocalIp":	"192.168.8.155",
+	"DeviceID":	"34020000001110000001",
+	"SipLocalPort":	5060,
+	"SipServerID":	"11010500492000000001",
+	"SipServerIp":	"202.41.241.198",
+	"SipField":	"1101050049",
+	"PassWord":	"12345678",
+	"SipServerPort":	5060,
+	"Keepalivetime":	3600,
+	"RegisterValidity":	300,
+	"HeartBeatinterval":	10,
+	"HeartBeatTimes":	3,
+	"ChnList":	["34020000001310000001", "34020000001310000002"],
+	"RtspChn":	["rtsp://192.168.8.66:554/live/1", "rtsp://admin:a12345678@192.168.8.161:554/Streaming/Channels/101?transportmode=unicast&profile=Profile_1"]
+}
