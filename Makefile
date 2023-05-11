@@ -1,4 +1,4 @@
-PROG = final_interface                   # Program we are building
+PROG = interface                   # Program we are building
 DELETE = rm -rf                   # Command to remove files
 OUT = -o $(PROG)                 # Compiler argument for output file
 CC = arm-mix410-linux-g++

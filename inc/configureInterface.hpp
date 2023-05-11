@@ -4,10 +4,16 @@
 #define __DEBUG_CZX_
 
 #include <unistd.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <arpa/inet.h>
+#include <linux/if.h>
+#include <net/if_arp.h>
+#include <netinet/in.h>
 
 #include <cstdio>
 #include <cstdlib>
@@ -19,6 +25,8 @@
 #include <iostream>
 #include <string>
 #include <map>
+#include <mutex>
+#include <vector>
 
 #include "mongoose.h"
 #include "CJsonObject.hpp"
@@ -30,11 +38,31 @@
 #define NETURI "/netConfigure"
 /*********************************************end*********************************************/
 
+/*******************************************HTTP响应头*******************************************/
+#define HTTP_HEADERS                                                  \
+                                            "Access-Control-Allow-Origin: *\r\n"                              \
+                                            "Access-Control-Max-Age: 3600\r\n"                                \
+                                            "Access-Control-Allow-Headers: X-Requested-With,content-type\r\n" \
+                                            "Access-Control-Allow-Methods: GET,POST,OPTIONS,DELETE\r\n"       \
+                                            "Access-Control-Allow-Credentials:true\r\n"
+
+#define HTTP_RESPONSE_JSON                  \
+                                            "Content-Type: application/json\r\n"                            \
+                                            "Access-Control-Allow-Origin: *\r\n"                             \
+                                            "Access-Control-Max-Age: 3600\r\n"                                \
+                                            "Access-Control-Allow-Headers: X-Requested-With,content-type\r\n" \
+                                            "Access-Control-Allow-Methods: GET,POST,OPTIONS,DELETE\r\n"       \
+                                            "Access-Control-Allow-Credentials:true\r\n"                         
+/*********************************************end*********************************************/
+
+
+
 
 #define _PORT 6006 //使用的端口
 #define _DEFAULT_GBCONFIG_PATH "/server/micagent/server/gbdevice/config.json"
 #define _DEFAULT_NETCONFIG_PATH "/server/micagent/server/config/networking.ini"
 #define URLLEN 24
+#define MAXNICNUM 4 //设备网卡最大数量
 
 /* 修改自mongoose网络库，将以下接口开放出来 */
 void read_conn(struct mg_connection *c);
@@ -187,6 +215,8 @@ private:
 
     static int _setNet(struct netInformation* netinfo, const string& netPath);
     static int _setNet(const string& netinfo, const string& netPath);
+    static int _getNet(vector<netInformation>& netinfo);
+    static int _NetToJson(const struct netInformation& netinfo, string& netJson);
 
     char _url[URLLEN]{0};
     string _ipAddress;   //监听ip地址
