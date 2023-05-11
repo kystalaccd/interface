@@ -213,10 +213,14 @@ private:
 
     static void _handler(struct mg_connection *c, int ev, void* ev_data, void* fn_data);
 
+    /* FUNCTION.01   网络配置相关的实现方法 */
     static int _setNet(struct netInformation* netinfo, const string& netPath);
     static int _setNet(const string& netinfo, const string& netPath);
     static int _getNet(vector<netInformation>& netinfo);
     static int _NetToJson(const struct netInformation& netinfo, string& netJson);
+
+    /* FUNCTION.02  GBDevice配置相关的实现方法 */
+    static int _GBToJson(int gbfd, string& gbJson);
 
     char _url[URLLEN]{0};
     string _ipAddress;   //监听ip地址

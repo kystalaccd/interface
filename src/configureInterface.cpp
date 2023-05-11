@@ -277,6 +277,29 @@ int configInterface::_setNet(const string& netinfo, const string& netPath){
     }
 }
 
+
+int configInterface::_GBToJson(int gbfd, string& gbJson){
+    char *buf{new char[4096]};
+    lseek(gbfd, SEEK_SET, 0);   //将文件读指针移动到文件开头
+    int n = read(gbfd, buf, 4096);
+    if(n<0){
+        cout<<__FILE__<<"; "<<__FUNCTION__<<"; "<<__LINE__<<"; "<<"ERROR: ";
+        perror(NULL);
+        return -1;
+    }
+    CJsonObject jsonBuf;
+    jsonBuf.Add("ProtocolCode", 1003);
+    jsonBuf.AddEmptySubArray("Parameters");
+    jsonBuf["Parameters"].Add(CJsonObject(string(buf)));
+#ifdef __DEBUG_CZX_
+cout<<__FILE__<<"; "<<__FUNCTION__<<"; "<<__LINE__<<"; "<<"GBConfig Reply: "<<"\n"<<jsonBuf.ToFormattedString()<<endl;
+#endif
+    gbJson=jsonBuf.ToString();
+    delete[] buf;
+    return 0;
+}
+
+
 void configInterface::_handler(struct mg_connection* c, int ev, void* ev_data, void* fn_data){
     /* 网络配置修改相关变量 */
     static int net_tag=0;   //网络配置修改标志，tag为0时代表没有被修改过，否则代表已修改，此时将会重启系统
@@ -291,11 +314,13 @@ void configInterface::_handler(struct mg_connection* c, int ev, void* ev_data, v
     int gb_wfd=(*((map<string, paramType>*)fn_data))[GBURI]._fd;
     char gb_buf[bufSize]{0};
     CJsonObject gb_bufjson;
+    bool gb_modify_tag=false;   //标志是否是修改gbdevice配置信息的报文，如果为true，代表是修改报文，如果为false，则不是
 
     /* 共有的变量 */
     struct mg_http_message *hm = (struct mg_http_message *) ev_data;
     int ProtocolCode=0;
 
+    /* FUNCTION.01  请求网络配置信息 以及 更改网络配置信息*/
     if (ev == MG_EV_HTTP_CHUNK && mg_http_match_uri(hm, NETURI)) {
         net_jsonBuf+=string(hm->body.ptr);
 #ifdef __DEBUG_CZX_
@@ -321,19 +346,34 @@ MG_INFO(("Last chunk received, sending response"));
             nic_vec.clear();
         }
     }
+    /* FUNCTION.02  请求GBDevice的配置文件详细信息 以及 更改GBDevice的配置文件详细信息 */
     else if (ev == MG_EV_HTTP_CHUNK && mg_http_match_uri(hm, GBURI)) {
-        if(hm->chunk.len>0 && gb_flag){
-            ftruncate(gb_wfd,0);
-            lseek(gb_wfd,SEEK_SET,0);
-            gb_flag.exchange(false);
+        CJsonObject(string(hm->body.ptr)).Get("ProtocolCode",ProtocolCode);
+        if(ProtocolCode==1002){     //GB设备信息获取
+            string gb_get_reply;
+            _GBToJson(gb_wfd, gb_get_reply);
+            mg_http_reply(c, 200, HTTP_RESPONSE_JSON, gb_get_reply.c_str());
         }
-        int gb_n = write(gb_wfd,(const char*)hm->chunk.ptr,hm->chunk.len);
-        if(gb_n<0){
-            perror("write error");
-            exit(-1);
+        else if(ProtocolCode==1000){    //GB设备信息配置
+            gb_modify_tag=true;
         }
-        mg_http_delete_chunk(c, hm);
-        if (hm->chunk.len == 0) {
+        if(gb_modify_tag==true){
+            if(hm->chunk.len>0 && gb_flag){
+                ftruncate(gb_wfd,0);
+                lseek(gb_wfd,SEEK_SET,0);
+                gb_flag.exchange(false);
+            }
+
+#ifdef __DEBUG_CZX_
+cout<<__FILE__<<";  "<<__LINE__<<";  GBCHUNK: "<<hm->chunk.ptr<<endl;
+#endif
+
+            int gb_n = write(gb_wfd,(const char*)hm->chunk.ptr,hm->chunk.len);
+            if(gb_n<0){
+                perror("write error");
+                exit(-1);
+            }
+            mg_http_delete_chunk(c, hm);
             MG_INFO(("Last chunk received, sending response"));
             lseek(gb_wfd,SEEK_SET,0);
             read(gb_wfd,gb_buf,bufSize);
@@ -347,10 +387,14 @@ cout<<gb_bufjson[0].ToFormattedString()<<endl;
                 ftruncate(gb_wfd, 0);
                 lseek(gb_wfd, SEEK_SET, 0);
                 write(gb_wfd, gb_bufjson[0].ToFormattedString().c_str(), gb_bufjson[0].ToFormattedString().length()); //重新写入符合格式的文件
+
             }
 
-            mg_http_reply(c, 0, "", "{\"ProtocolCode\":1001,\"Parameters\":0}");
+            mg_http_reply(c, 200, HTTP_RESPONSE_JSON, "{\"ProtocolCode\":1001,\"Parameters\":0}");
             gb_flag.exchange(true);
+
+            //此时修改成功，将修改报文标志位置为fase
+            gb_modify_tag=false;
         }
     }
 
