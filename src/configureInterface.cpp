@@ -211,6 +211,7 @@ int configInterface::_setNet(struct netInformation* netinfo, const string& netPa
     //新建默认网络配置文件
     FILE* nfd=fopen(netPath.c_str(), "w+"); //w+会清空文件内容
     if(nfd==nullptr){
+        iniparser_freedict(defaultConfig);
         return -1;
     }
     else{
@@ -233,7 +234,9 @@ int configInterface::_setNet(const string& netinfo, const string& netPath){
     CJsonObject arrjson;
     totaljson.Get("Parameters",arrjson);
     CJsonObject netjson(arrjson[0]);
-    cout<<arrjson[0].ToFormattedString()<<endl;
+#ifdef __DEBUG_CZX_
+cout<<arrjson[0].ToFormattedString()<<endl;
+#endif
     //CJsonObject netjson(netinfo);   //读取json内容
     dictionary* defaultConfig=iniparser_load(netPath.c_str());
     struct netInformation net_s{0};
@@ -299,6 +302,40 @@ cout<<__FILE__<<"; "<<__FUNCTION__<<"; "<<__LINE__<<"; "<<"GBConfig Reply: "<<"\
     return 0;
 }
 
+int configInterface::_synchronousGB(const string& netinfo, int gbfd){    //同步更新gbdevice的配置信息
+    const int bufSize=2048;
+    char* buf=new char[2048]{0};
+    if(netinfo.length()<2 || netinfo[0] != '{'){
+        return -1;  //字符串无效时，直接返回
+        cout<<"invalid"<<endl;
+    }
+    CJsonObject totaljson(netinfo);
+    CJsonObject arrjson;
+    totaljson.Get("Parameters",arrjson);
+    CJsonObject netjson(arrjson[0]);
+    string ipaddress("");
+#ifdef __DEBUG_CZX_
+cout<<__FILE__<<"; "<<__FUNCTION__<<"; "<<__LINE__<<":\n"<<arrjson[0].ToFormattedString()<<endl;
+#endif
+
+    netjson.Get("IpAddr", ipaddress);
+    if(ipaddress != ""){    //如果ip信息有效
+        lseek(gbfd, SEEK_SET, 0);
+        int n=read(gbfd, buf, bufSize);
+        if(n<0){
+            return -1;
+        }
+
+        string buf_str(buf);
+        CJsonObject outputJson(buf_str);
+        outputJson.Replace("LocalIp", ipaddress);
+        ftruncate(gbfd,0);
+        lseek(gbfd, SEEK_SET, 0);
+        n=write(gbfd, outputJson.ToFormattedString().c_str(), outputJson.ToFormattedString().length());
+    }
+    delete [] buf;
+    return 0;
+}
 
 void configInterface::_handler(struct mg_connection* c, int ev, void* ev_data, void* fn_data){
     /* 网络配置修改相关变量 */
@@ -334,6 +371,8 @@ MG_INFO(("Last chunk received, sending response"));
             mg_http_reply(c, 200, HTTP_RESPONSE_JSON, "{\"ProtocolCode\":1005,\"Parameters\":0}");
             ++net_tag;
             _setNet(net_jsonBuf, net_configPath);
+            //同步gb配置信息
+            _synchronousGB(net_jsonBuf, gb_wfd);
             net_jsonBuf.clear();
         }
         else if(ProtocolCode==1006){        //网络信息获取

@@ -218,6 +218,7 @@ private:
     static int _setNet(const string& netinfo, const string& netPath);
     static int _getNet(vector<netInformation>& netinfo);
     static int _NetToJson(const struct netInformation& netinfo, string& netJson);
+    static int _synchronousGB(const string& ip, int gbfd);
 
     /* FUNCTION.02  GBDevice配置相关的实现方法 */
     static int _GBToJson(int gbfd, string& gbJson);
