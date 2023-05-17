@@ -432,8 +432,9 @@ cout<<gb_bufjson[0].ToFormattedString()<<endl;
             mg_http_reply(c, 200, HTTP_RESPONSE_JSON, "{\"ProtocolCode\":1001,\"Parameters\":0}");
             gb_flag.exchange(true);
 
-            //此时修改成功，将修改报文标志位置为fase
+            //此时修改成功，将修改报文标志位置为fase，同时重启设备使配置生效
             gb_modify_tag=false;
+            write_conn(c);
             cout<<"Reboot soon..."<<endl;
             sleep(5);
             system("reboot");
