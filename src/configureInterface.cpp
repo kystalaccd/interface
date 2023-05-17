@@ -434,6 +434,9 @@ cout<<gb_bufjson[0].ToFormattedString()<<endl;
 
             //此时修改成功，将修改报文标志位置为fase
             gb_modify_tag=false;
+            cout<<"Reboot soon..."<<endl;
+            sleep(5);
+            system("reboot");
         }
     }
 
