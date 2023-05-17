@@ -20,7 +20,7 @@ int configInterface::_NetToJson(const struct netInformation& netinfo, string& ne
     netJsonObj.Add("GateWay",netinfo.GateWay);
     netJsonObj.Add("Mac",netinfo.Mac);
 
-    transJson["Parameters"].Add(netJsonObj); 
+    transJson["Parameters"].Add(netJsonObj);
     netJson=transJson.ToString();
     //cout<<transJson.ToFormattedString();
 
@@ -50,7 +50,7 @@ int configInterface::_getNet(vector<netInformation>& netinfo_v){
 
     ifc.ifc_len = sizeof(buf);
     ifc.ifc_buf = (caddr_t)buf;
-    
+
     /*step 01. 获取所有网卡默认网关信息*/
     FILE *fp=popen("ip route show","r");	//网关地址无法用ioctl获取，因此使用ip命令
     char gw_buf[1024]={0};
@@ -59,8 +59,8 @@ int configInterface::_getNet(vector<netInformation>& netinfo_v){
     {
         /*
         以本机为例，获取到的信息为：
-        default via 192.168.2.3 dev ens33 onlink 
-        default via 192.168.200.2 dev ens38 proto dhcp metric 101 
+        default via 192.168.2.3 dev ens33 onlink
+        default via 192.168.200.2 dev ens38 proto dhcp metric 101
         */
         if(strstr(gw_buf,"default")!=nullptr)
         {
@@ -83,7 +83,7 @@ int configInterface::_getNet(vector<netInformation>& netinfo_v){
     */
     pclose(fp);
 
-    
+
     if (!ioctl(fd, SIOCGIFCONF, (char *)&ifc))
     {
         interfaceNum = ifc.ifc_len / sizeof(struct ifreq);
@@ -107,7 +107,7 @@ int configInterface::_getNet(vector<netInformation>& netinfo_v){
             netinfo.GateWay=gw_ip_map[ethName];
 
 
-            //ignore the interface that not up or not runing  
+            //ignore the interface that not up or not runing
             ifrcopy = buf[interfaceNum];
             if (ioctl(fd, SIOCGIFFLAGS, &ifrcopy))
             {
@@ -117,7 +117,7 @@ int configInterface::_getNet(vector<netInformation>& netinfo_v){
                 return -1;
             }
 
-            //get the mac of this interface  
+            //get the mac of this interface
            if (!ioctl(fd, SIOCGIFHWADDR, (char *)(&buf[interfaceNum])))
             {
                 memset(mac, 0, sizeof(mac));
@@ -139,7 +139,7 @@ int configInterface::_getNet(vector<netInformation>& netinfo_v){
                 return -1;
             }
 
-            //get the IP of this interface  
+            //get the IP of this interface
 
             if (!ioctl(fd, SIOCGIFADDR, (char *)&buf[interfaceNum]))
             {
@@ -155,7 +155,7 @@ int configInterface::_getNet(vector<netInformation>& netinfo_v){
                 return -1;
             }
 
-            //get the subnet mask of this interface  
+            //get the subnet mask of this interface
             if (!ioctl(fd, SIOCGIFNETMASK, &buf[interfaceNum]))
             {
                 snprintf(subnetMask, sizeof(subnetMask), "%s",
@@ -343,7 +343,7 @@ void configInterface::_handler(struct mg_connection* c, int ev, void* ev_data, v
     string net_configPath=(*((map<string, paramType>*)fn_data))[NETURI]._configPath;
     string net_jsonBuf(""); //存放接收到的json格式报文
     vector<netInformation> nic_vec; //存放设备所有网卡的详细信息
-    
+
 
     /* GB配置修改相关变量 */
     constexpr int bufSize=4096;
@@ -366,7 +366,7 @@ cout<<"net_jsonBuf: "<<net_jsonBuf<<endl;
 MG_INFO(("Last chunk received, sending response"));
 #endif
         mg_http_delete_chunk(c,hm);
-        CJsonObject(net_jsonBuf).Get("ProtocolCode",ProtocolCode); 
+        CJsonObject(net_jsonBuf).Get("ProtocolCode",ProtocolCode);
         if(ProtocolCode==1004){     //网络信息配置
             mg_http_reply(c, 200, HTTP_RESPONSE_JSON, "{\"ProtocolCode\":1005,\"Parameters\":0}");
             ++net_tag;
